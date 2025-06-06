@@ -140,15 +140,7 @@ func (w *clientStream) endSpan(err error) {
 
 // StreamClientInterceptor returns a grpc.StreamClientInterceptor suitable
 // for use in a grpc.NewClient call.
-//
-// Deprecated: Use [NewClientHandler] instead.
 func StreamClientInterceptor(opts ...Option) grpc.StreamClientInterceptor {
-	cfg := newConfig(opts)
-	tracer := cfg.TracerProvider.Tracer(
-		ScopeName,
-		trace.WithInstrumentationVersion(Version()),
-	)
-
 	return func(
 		ctx context.Context,
 		desc *grpc.StreamDesc,
@@ -157,41 +149,48 @@ func StreamClientInterceptor(opts ...Option) grpc.StreamClientInterceptor {
 		streamer grpc.Streamer,
 		callOpts ...grpc.CallOption,
 	) (grpc.ClientStream, error) {
-		i := &InterceptorInfo{
-			Method: method,
-			Type:   StreamClient,
-		}
-		if cfg.InterceptorFilter != nil && !cfg.InterceptorFilter(i) {
-			return streamer(ctx, desc, cc, method, callOpts...)
-		}
+		return streamer(ctx, desc, cc, method, callOpts...)
+	}
+}
 
-		name, attr := telemetryAttributes(method, cc.Target())
+// StreamServerInterceptor returns a grpc.StreamServerInterceptor suitable
+// for use in a grpc.NewServer call.
+func StreamServerInterceptor(opts ...Option) grpc.StreamServerInterceptor {
+	return func(
+		srv interface{},
+		ss grpc.ServerStream,
+		info *grpc.StreamServerInfo,
+		handler grpc.StreamHandler,
+	) error {
+		return nil
+	}
+}
 
-		startOpts := append([]trace.SpanStartOption{
-			trace.WithSpanKind(trace.SpanKindClient),
-			trace.WithAttributes(attr...),
-		},
-			cfg.SpanStartOptions...,
-		)
+// UnaryClientInterceptor returns a grpc.UnaryClientInterceptor suitable
+// for use in a grpc.NewClient call.
+func UnaryClientInterceptor(opts ...Option) grpc.UnaryClientInterceptor {
+	return func(
+		ctx context.Context,
+		method string,
+		req, reply interface{},
+		cc *grpc.ClientConn,
+		invoker grpc.UnaryInvoker,
+		callOpts ...grpc.CallOption,
+	) error {
+		return nil
+	}
+}
 
-		ctx, span := tracer.Start(
-			ctx,
-			name,
-			startOpts...,
-		)
-
-		ctx = inject(ctx, cfg.Propagators)
-
-		s, err := streamer(ctx, desc, cc, method, callOpts...)
-		if err != nil {
-			grpcStatus, _ := status.FromError(err)
-			span.SetStatus(codes.Error, grpcStatus.Message())
-			span.SetAttributes(statusCodeAttr(grpcStatus.Code()))
-			span.End()
-			return s, err
-		}
-		stream := wrapClientStream(s, desc, span, cfg)
-		return stream, nil
+// UnaryServerInterceptor returns a grpc.UnaryServerInterceptor suitable
+// for use in a grpc.NewServer call.
+func UnaryServerInterceptor(opts ...Option) grpc.UnaryServerInterceptor {
+	return func(
+		ctx context.Context,
+		req interface{},
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (interface{}, error) {
+		return handler(ctx, req)
 	}
 }
 
